@@ -24,26 +24,26 @@
 #include "secrets.example.h"
 #endif
 
-// Nomor GPIO mengikuti PRD.
+// Nomor GPIO.
 #define DHT_PIN 4
 #define WINDOW_PIN 33
-#define DOOR_PIN 35       // Perlu resistor pull-up eksternal
-#define LAMP1_PIN 16
-#define LAMP2_PIN 17
-#define BLOWER_PIN 12     // Periksa level GPIO12 saat ESP32 boot
+#define DOOR_PIN 35
+#define LAMP1_PIN 17
+#define LAMP2_PIN 16
+#define BLOWER_PIN 12
 #define OLED_SDA 21
 #define OLED_SCL 22
-#define RFID_SS 5         // Periksa level GPIO5 saat ESP32 boot
+#define RFID_SS 5
 #define RFID_RST 27
 #define SERVO_PIN 25
 #define HLW_CF1 13
 #define HLW_SEL 26
-#define HLW_CF 34         // GPIO34 hanya input
+#define HLW_CF 34
 #define POWER_RELAY_PIN 32
 
 // Sesuaikan polaritas dengan rangkaian yang dipakai.
-constexpr byte RELAY_ON_LEVEL = LOW;
-constexpr byte RELAY_OFF_LEVEL = HIGH;
+constexpr byte RELAY_ON_LEVEL = HIGH;
+constexpr byte RELAY_OFF_LEVEL = LOW;
 constexpr byte POWER_RELAY_ON_LEVEL = HIGH;
 constexpr byte DOOR_OPEN_LEVEL = HIGH;
 constexpr byte WINDOW_OPEN_LEVEL = HIGH;
@@ -51,7 +51,7 @@ constexpr byte HLW_CURRENT_LEVEL = HIGH;
 
 // Nilai HLW ini contoh awal. Kalibrasi dengan resistor PCB dan beban acuan.
 constexpr double HLW_CURRENT_RESISTOR = 0.001;
-constexpr double HLW_VOLTAGE_UPSTREAM = 2350000.0;
+constexpr double HLW_VOLTAGE_UPSTREAM = 5 * 470000;
 constexpr double HLW_VOLTAGE_DOWNSTREAM = 1000.0;
 constexpr double HLW_POWER_CORRECTION = 1.0;
 
