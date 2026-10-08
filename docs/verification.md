@@ -76,9 +76,9 @@ telah diidentifikasi. Pakai project/device uji untuk skenario NVS dan command.
 
 ## Tampilan
 
-- [x] Browser pada viewport 1280px: tiga kartu perangkat sejajar; satu kontak jendela.
-- [x] Browser pada viewport 820px: dua kolom, kartu kunci memenuhi baris terakhir.
-- [x] Browser pada viewport 390px: satu kolom perangkat tanpa overflow horizontal.
+- [x] Browser pada viewport 1280px: tiga kartu perangkat sejajar; empat kartu sensor sejajar termasuk status jendela.
+- [x] Browser pada viewport 820px: dua kolom sensor/perangkat, kartu kunci memenuhi baris terakhir.
+- [x] Browser pada viewport 320px: satu kolom perangkat dan dua kolom sensor tanpa overflow horizontal.
 
 Ukuran dan posisi elemen diverifikasi melalui DOM browser menggunakan telemetry
 contoh lokal; pemeriksaan ini tidak mengirim command ke Antares.

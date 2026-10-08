@@ -1308,7 +1308,7 @@ Access key disimpan dalam `.env` dan dibaca hanya oleh proses Node; browser tida
 
 # 50. Dashboard Main Page
 
-Satu halaman memuat status koneksi, waktu pembaruan, suhu, kelembaban, daya aktif, kontak jendela, serta kontrol Lampu/Blower/Kunci pintu. Grid perangkat menggunakan tiga kolom pada desktop (>950px), dua kolom pada tablet (701–950px) dengan kartu terakhir memenuhi baris, dan satu kolom pada ponsel (≤700px). Kontak jendela memenuhi satu baris.
+Satu halaman memuat status koneksi, waktu pembaruan, suhu, kelembaban, daya aktif, kontak jendela, serta kontrol Lampu/Blower/Kunci pintu. Grid perangkat menggunakan tiga kolom pada desktop (>950px), dua kolom pada tablet (701–950px) dengan kartu terakhir memenuhi baris, dan satu kolom pada ponsel (≤700px). Ringkasan sensor memuat empat kartu sejajar pada desktop: suhu, kelembaban, daya aktif, dan status jendela. Tablet/ponsel menampilkan ringkasan sensor dalam dua kolom.
 
 ---
 
