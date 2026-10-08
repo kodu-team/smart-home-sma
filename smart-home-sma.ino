@@ -27,9 +27,7 @@
 // Nomor GPIO.
 #define DHT_PIN 4
 #define WINDOW_PIN 33
-#define DOOR_PIN 35
-#define LAMP1_PIN 17
-#define LAMP2_PIN 16
+#define LAMP_PIN 17
 #define BLOWER_PIN 12
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -45,7 +43,6 @@
 constexpr byte RELAY_ON_LEVEL = HIGH;
 constexpr byte RELAY_OFF_LEVEL = LOW;
 constexpr byte POWER_RELAY_ON_LEVEL = HIGH;
-constexpr byte DOOR_OPEN_LEVEL = HIGH;
 constexpr byte WINDOW_OPEN_LEVEL = HIGH;
 constexpr byte HLW_CURRENT_LEVEL = HIGH;
 
@@ -88,10 +85,8 @@ float temperature = NAN;
 float humidity = NAN;
 float activePower = 0;
 bool dhtReadingValid = false;
-bool doorOpen = false;
 bool windowOpen = false;
-bool lamp1On = false;
-bool lamp2On = false;
+bool lampOn = false;
 bool blowerOn = false;
 bool doorLocked = true;
 bool rtcReady = false;
@@ -102,13 +97,10 @@ bool wifiWasConnected = false;
 bool ntpTimePending = false;
 
 // Konfigurasi awal. Nilai dari Preferences atau Antares dapat menggantinya.
-byte lamp1Mode = 0;       // 0=manual, 1=jadwal
-byte lamp2Mode = 0;
+byte lampMode = 0;       // 0=manual, 1=jadwal
 byte blowerMode = 0;      // 0=manual, 1=berdasarkan suhu
-String lamp1OnTime = "18:00";
-String lamp1OffTime = "06:00";
-String lamp2OnTime = "18:00";
-String lamp2OffTime = "06:00";
+String lampOnTime = "18:00";
+String lampOffTime = "06:00";
 float blowerThreshold = 33.0;
 float blowerHysteresis = 1.0;
 String lastCommandId;
@@ -135,7 +127,6 @@ struct ContactState {
   bool stable = false;
   unsigned long changedAt = 0;
 };
-ContactState doorContact{DOOR_PIN, DOOR_OPEN_LEVEL};
 ContactState windowContact{WINDOW_PIN, WINDOW_OPEN_LEVEL};
 
 // Log diberi waktu sejak boot agar siswa mudah mengikuti urutan kejadian.
@@ -145,18 +136,11 @@ void debugLog(const char *tag, const String &message) {
 }
 
 // Aktuator hanya diubah jika berbeda dari state sekarang. Log debug menampilkan perubahan.
-void setLamp1(bool on) {
-  if (lamp1On == on) return;
-  lamp1On = on;
-  digitalWrite(LAMP1_PIN, on ? RELAY_ON_LEVEL : RELAY_OFF_LEVEL);
-  debugLog("LAMP1", on ? "ON" : "OFF");
-}
-
-void setLamp2(bool on) {
-  if (lamp2On == on) return;
-  lamp2On = on;
-  digitalWrite(LAMP2_PIN, on ? RELAY_ON_LEVEL : RELAY_OFF_LEVEL);
-  debugLog("LAMP2", on ? "ON" : "OFF");
+void setLamp(bool on) {
+  if (lampOn == on) return;
+  lampOn = on;
+  digitalWrite(LAMP_PIN, on ? RELAY_ON_LEVEL : RELAY_OFF_LEVEL);
+  debugLog("LAMP", on ? "ON" : "OFF");
 }
 
 void setBlower(bool on) {
@@ -217,18 +201,15 @@ bool scheduledOn(const String &on, const String &off, int nowMinutes) {
 }
 
 // Evaluasi saat boot, mode/jadwal berubah, atau RTC baru memperoleh waktu.
-void applyScheduledLamps(bool checkLamp1 = true, bool checkLamp2 = true) {
+void applyScheduledLamp() {
   if (!rtcValid) return;
   DateTime now = rtc.now();
   int minute = now.hour() * 60 + now.minute();
-  if (checkLamp1 && lamp1Mode == 1)
-    setLamp1(scheduledOn(lamp1OnTime, lamp1OffTime, minute));
-  if (checkLamp2 && lamp2Mode == 1)
-    setLamp2(scheduledOn(lamp2OnTime, lamp2OffTime, minute));
+  if (lampMode == 1)
+    setLamp(scheduledOn(lampOnTime, lampOffTime, minute));
 }
 
-// Jadwal hanya mengubah relay pada menit event. Door/Force OFF tidak ditimpa
-// berulang-ulang selama menunggu event berikutnya.
+// Jadwal mengubah relay pada menit event setelah evaluasi saat boot/perubahan config.
 void checkSchedule() {
   unsigned long nowMs = millis();
   if (nowMs - lastScheduleAt < SCHEDULE_INTERVAL) return;
@@ -242,7 +223,7 @@ void checkSchedule() {
     lastCheckedMinute = UINT32_MAX;
     debugLog("RTC", valid ? "Waktu valid" : "Waktu belum valid");
     if (valid) {
-      applyScheduledLamps();
+      applyScheduledLamp();
       lastCheckedMinute = now.unixtime() / 60;
     }
   }
@@ -252,19 +233,15 @@ void checkSchedule() {
   if (minuteKey == lastCheckedMinute) return;
   lastCheckedMinute = minuteKey;
   int minute = now.hour() * 60 + now.minute();
-  if (lamp1Mode == 1) {
-    if (minute == minutesOfDay(lamp1OnTime)) setLamp1(true);
-    else if (minute == minutesOfDay(lamp1OffTime)) setLamp1(false);
-  }
-  if (lamp2Mode == 1) {
-    if (minute == minutesOfDay(lamp2OnTime)) setLamp2(true);
-    else if (minute == minutesOfDay(lamp2OffTime)) setLamp2(false);
+  if (lampMode == 1) {
+    if (minute == minutesOfDay(lampOnTime)) setLamp(true);
+    else if (minute == minutesOfDay(lampOffTime)) setLamp(false);
   }
 }
 
 // Pin input diatur sesuai tipe sensor. Bacaan awal dianggap stabil.
 void initContact(ContactState &contact) {
-  pinMode(contact.pin, contact.pin == DOOR_PIN ? INPUT : INPUT_PULLUP);
+  pinMode(contact.pin, INPUT_PULLUP);
   contact.raw = digitalRead(contact.pin) == contact.openLevel;
   contact.stable = contact.raw;
   contact.changedAt = millis();
@@ -285,16 +262,8 @@ bool readContact(ContactState &contact) {
   return false;
 }
 
-// Bacaan door/window hanya dipakai untuk log dan telemetry. Lampu 1 bisa menyala otomatis saat pintu dibuka.
-void readDoorAndWindow() {
-  if (readContact(doorContact)) {
-    bool wasOpen = doorOpen;
-    doorOpen = doorContact.stable;
-    debugLog("DOOR", doorOpen ? "OPEN" : "CLOSED");
-    
-    if (!wasOpen && doorOpen) setLamp1(true);
-  }
-
+// Kontak jendela hanya dipakai untuk log dan telemetry.
+void readWindow() {
   if (readContact(windowContact)) {
     windowOpen = windowContact.stable;
     debugLog("WINDOW", windowOpen ? "OPEN" : "CLOSED");
@@ -410,25 +379,25 @@ void loadConfig() {
     debugLog("CONFIG", "NVS gagal dibuka; memakai nilai awal");
     return;
   }
-  byte mode = preferences.getUChar("lamp1_mode", 0);
-  if (mode <= 1) lamp1Mode = mode;
-  mode = preferences.getUChar("lamp2_mode", 0);
-  if (mode <= 1) lamp2Mode = mode;
+  // Key baru diutamakan. Key legacy hanya dibaca untuk migrasi pertama.
+  bool hasMode = preferences.isKey("lamp_mode");
+  bool hasOn = preferences.isKey("lamp_on");
+  bool hasOff = preferences.isKey("lamp_off");
+  byte mode = preferences.getUChar(hasMode ? "lamp_mode" : "lamp1_mode", 0);
+  if (mode <= 1) lampMode = mode;
+  String on = preferences.getString(hasOn ? "lamp_on" : "lamp1_on", "18:00");
+  String off = preferences.getString(hasOff ? "lamp_off" : "lamp1_off", "06:00");
+  if (validTime(on) && validTime(off) && on != off) {
+    lampOnTime = on;
+    lampOffTime = off;
+  }
+  // Tidak menghapus key lama atau me-reset namespace; retry key yang belum tersimpan.
+  if (!hasMode) preferences.putUChar("lamp_mode", lampMode);
+  if (!hasOn) preferences.putString("lamp_on", lampOnTime);
+  if (!hasOff) preferences.putString("lamp_off", lampOffTime);
+  if (!hasMode || !hasOn || !hasOff) debugLog("CONFIG", "Migrasi konfigurasi lampu ke v2");
   mode = preferences.getUChar("blower_mode", 0);
   if (mode <= 1) blowerMode = mode;
-
-  String on = preferences.getString("lamp1_on", "18:00");
-  String off = preferences.getString("lamp1_off", "06:00");
-  if (validTime(on) && validTime(off) && on != off) {
-    lamp1OnTime = on;
-    lamp1OffTime = off;
-  }
-  on = preferences.getString("lamp2_on", "18:00");
-  off = preferences.getString("lamp2_off", "06:00");
-  if (validTime(on) && validTime(off) && on != off) {
-    lamp2OnTime = on;
-    lamp2OffTime = off;
-  }
 
   float threshold = preferences.getFloat("blower_thr", 33.0);
   float hysteresis = preferences.getFloat("blower_hyst", 1.0);
@@ -482,15 +451,11 @@ bool applyLampConfig(JsonObjectConst data, byte &mode, String &on, String &off,
 }
 
 bool applyConfig(JsonObjectConst doc) {
-  bool lamp1Changed = false;
-  bool lamp2Changed = false;
+  bool lampChanged = false;
   bool blowerChanged = false;
-  bool accepted = applyLampConfig(doc["lamp1"].as<JsonObjectConst>(), lamp1Mode,
-                                  lamp1OnTime, lamp1OffTime, "lamp1_mode", "lamp1_on",
-                                  "lamp1_off", lamp1Changed);
-  accepted |= applyLampConfig(doc["lamp2"].as<JsonObjectConst>(), lamp2Mode,
-                              lamp2OnTime, lamp2OffTime, "lamp2_mode", "lamp2_on",
-                              "lamp2_off", lamp2Changed);
+  bool accepted = applyLampConfig(doc["lamp"].as<JsonObjectConst>(), lampMode,
+                                  lampOnTime, lampOffTime, "lamp_mode", "lamp_on",
+                                  "lamp_off", lampChanged);
 
   JsonObjectConst blower = doc["blower"].as<JsonObjectConst>();
   if (!blower.isNull()) {
@@ -528,9 +493,9 @@ bool applyConfig(JsonObjectConst doc) {
       }
     }
   }
-  if (lamp1Changed || lamp2Changed) applyScheduledLamps(lamp1Changed, lamp2Changed);
+  if (lampChanged) applyScheduledLamp();
   if (blowerChanged) applyBlowerAutomation();
-  if (lamp1Changed || lamp2Changed || blowerChanged)
+  if (lampChanged || blowerChanged)
     debugLog("CONFIG", "Perubahan disimpan");
   return accepted;
 }
@@ -559,29 +524,20 @@ void saveCommandResult(const String &id, const char *result) {
 }
 
 const char *applyControl(JsonObjectConst doc) {
-  if (!validAction(doc["lamp1"], "ON", "OFF") ||
-      !validAction(doc["lamp2"], "ON", "OFF") ||
+  if (!validAction(doc["lamp"], "ON", "OFF") ||
       !validAction(doc["blower"], "ON", "OFF") ||
       !validAction(doc["door_lock"], "LOCK", "UNLOCK")) {
     debugLog("COMMAND", "Aksi tidak valid");
     return "rejected";
   }
 
-  const char *lamp1 = action(doc["lamp1"]);
-  const char *lamp2 = action(doc["lamp2"]);
+  const char *lamp = action(doc["lamp"]);
   const char *blower = action(doc["blower"]);
   const char *door = action(doc["door_lock"]);
   bool applied = false;
-  if (strcmp(lamp1, "OFF") == 0) {
-    setLamp1(false); // Matikan Sekarang juga berlaku dalam mode jadwal
-    applied = true;
-  } else if (strcmp(lamp1, "ON") == 0 && lamp1Mode == 0) {
-    setLamp1(true);
-    applied = true;
-  }
-  if (lamp2Mode == 0) {
-    if (strcmp(lamp2, "ON") == 0) { setLamp2(true); applied = true; }
-    else if (strcmp(lamp2, "OFF") == 0) { setLamp2(false); applied = true; }
+  if (lampMode == 0) {
+    if (strcmp(lamp, "ON") == 0) { setLamp(true); applied = true; }
+    else if (strcmp(lamp, "OFF") == 0) { setLamp(false); applied = true; }
   }
   if (blowerMode == 0) {
     if (strcmp(blower, "ON") == 0) { setBlower(true); applied = true; }
@@ -590,6 +546,36 @@ const char *applyControl(JsonObjectConst doc) {
   if (strcmp(door, "LOCK") == 0) { lockDoor(); applied = true; }
   else if (strcmp(door, "UNLOCK") == 0) { unlockDoor(); applied = true; }
   return applied ? "applied" : "ignored";
+}
+
+// Tolak field asing pada seluruh payload sebelum ada perubahan aktuator/NVS.
+bool hasOnlyKeys(JsonObjectConst data, const char *const *keys, size_t count) {
+  for (JsonPairConst field : data) {
+    bool known = false;
+    for (size_t i = 0; i < count; ++i) {
+      if (strcmp(field.key().c_str(), keys[i]) == 0) { known = true; break; }
+    }
+    if (!known) return false;
+  }
+  return true;
+}
+
+bool validCommandFields(JsonObjectConst doc, const char *type) {
+  const char *const configKeys[] = {"id", "type", "lamp", "blower"};
+  const char *const controlKeys[] = {"id", "type", "lamp", "blower", "door_lock"};
+  if (strcmp(type, "control") == 0) return hasOnlyKeys(doc, controlKeys, 5);
+  if (strcmp(type, "config") != 0 || !hasOnlyKeys(doc, configKeys, 4)) return false;
+
+  const char *const lampKeys[] = {"mode", "on", "off"};
+  const char *const blowerKeys[] = {"mode", "threshold", "hysteresis"};
+  for (const char *key : {"lamp", "blower"}) {
+    if (doc[key].isNull()) continue;
+    if (!doc[key].is<JsonObjectConst>()) return false;
+    JsonObjectConst config = doc[key].as<JsonObjectConst>();
+    if (!hasOnlyKeys(config, strcmp(key, "lamp") == 0 ? lampKeys : blowerKeys, 3))
+      return false;
+  }
+  return true;
 }
 
 void applyCommand(const String &raw) {
@@ -604,9 +590,11 @@ void applyCommand(const String &raw) {
 
   const char *result = "rejected";
   if (doc["type"].is<const char *>()) {
-    String type = doc["type"].as<String>();
-    if (type == "config") result = applyConfig(doc.as<JsonObjectConst>()) ? "applied" : "rejected";
-    else if (type == "control") result = applyControl(doc.as<JsonObjectConst>());
+    const char *type = doc["type"].as<const char *>();
+    if (validCommandFields(doc.as<JsonObjectConst>(), type)) {
+      if (strcmp(type, "config") == 0) result = applyConfig(doc.as<JsonObjectConst>()) ? "applied" : "rejected";
+      else if (strcmp(type, "control") == 0) result = applyControl(doc.as<JsonObjectConst>());
+    }
   }
   saveCommandResult(id, result);
 }
@@ -653,7 +641,7 @@ void checkNtp() {
   rtc.adjust(value);
   rtcValid = true;
   if (!wasValid) {
-    applyScheduledLamps();
+    applyScheduledLamp();
     lastCheckedMinute = value.unixtime() / 60;
   }
   ntpTimePending = false;
@@ -679,18 +667,13 @@ void publishTelemetry() {
   antares.add("sensor", "temperature", isnan(temperature) ? 0.0f : temperature);
   antares.add("sensor", "humidity", isnan(humidity) ? 0.0f : humidity);
   antares.add("sensor", "active_power", activePower);
-  antares.add("contact", "door", String(doorOpen ? "OPEN" : "CLOSED"));
   antares.add("contact", "window", String(windowOpen ? "OPEN" : "CLOSED"));
-  antares.add("actuator", "lamp1", String(lamp1On ? "ON" : "OFF"));
-  antares.add("actuator", "lamp2", String(lamp2On ? "ON" : "OFF"));
+  antares.add("actuator", "lamp", String(lampOn ? "ON" : "OFF"));
   antares.add("actuator", "blower", String(blowerOn ? "ON" : "OFF"));
   antares.add("actuator", "door_lock", String(doorLocked ? "LOCK" : "UNLOCK"));
-  antares.add("lamp1_config", "mode", (int)lamp1Mode);
-  antares.add("lamp1_config", "on", lamp1OnTime);
-  antares.add("lamp1_config", "off", lamp1OffTime);
-  antares.add("lamp2_config", "mode", (int)lamp2Mode);
-  antares.add("lamp2_config", "on", lamp2OnTime);
-  antares.add("lamp2_config", "off", lamp2OffTime);
+  antares.add("lamp_config", "mode", (int)lampMode);
+  antares.add("lamp_config", "on", lampOnTime);
+  antares.add("lamp_config", "off", lampOffTime);
   antares.add("blower_config", "mode", (int)blowerMode);
   antares.add("blower_config", "threshold", blowerThreshold);
   antares.add("blower_config", "hysteresis", blowerHysteresis);
@@ -711,17 +694,14 @@ void setup() {
   antares.setDebug(ANTARES_HTTP_DEBUG);
 
   // Relay utama dimatikan sebelum pin menjadi output. Relay sensor daya ON.
-  digitalWrite(LAMP1_PIN, RELAY_OFF_LEVEL); pinMode(LAMP1_PIN, OUTPUT);
-  digitalWrite(LAMP2_PIN, RELAY_OFF_LEVEL); pinMode(LAMP2_PIN, OUTPUT);
+  digitalWrite(LAMP_PIN, RELAY_OFF_LEVEL); pinMode(LAMP_PIN, OUTPUT);
   digitalWrite(BLOWER_PIN, RELAY_OFF_LEVEL); pinMode(BLOWER_PIN, OUTPUT);
   digitalWrite(POWER_RELAY_PIN, POWER_RELAY_ON_LEVEL); pinMode(POWER_RELAY_PIN, OUTPUT);
   lockServo.setPeriodHertz(50);
   lockServo.attach(SERVO_PIN, 500, 2400);
   lockServo.write(0); // Kunci mulai dalam state LOCK.
 
-  initContact(doorContact);
   initContact(windowContact);
-  doorOpen = doorContact.stable;
   windowOpen = windowContact.stable;
   dht.begin();
 
@@ -741,7 +721,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(HLW_CF1), onHlwCf1, CHANGE);
 
   loadConfig();
-  applyScheduledLamps(); // Evaluasi jadwal saat boot jika RTC sudah valid.
+  applyScheduledLamp(); // Evaluasi jadwal saat boot jika RTC sudah valid.
   if (rtcValid) lastCheckedMinute = rtc.now().unixtime() / 60;
   updateOLED();
 
@@ -760,7 +740,7 @@ void setup() {
 // Urutan lokal ditempatkan lebih dulu. Tiap putaran hanya membuat satu
 // request Antares agar sensor dan RFID sempat diproses di antara request.
 void loop() {
-  readDoorAndWindow();
+  readWindow();
   checkRfid();
   readDht();
   readPower();
