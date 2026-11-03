@@ -62,6 +62,14 @@ Monitor 115200 baud.
   jaringan lambat dapat menunda loop.
 - Poll command tiap 5 detik dan kirim telemetry tiap 10 detik pada koneksi normal.
   Dashboard mengambil data tiap 5 detik dan menunggu konfirmasi ID dari ESP32.
+- Kesiapan command dan telemetry dihitung terpisah. Jika keduanya siap, operasi
+  bergantian berdasarkan percobaan terakhir, termasuk jika gagal. Setelah Wi-Fi
+  tersambung atau tersambung kembali, keduanya siap dan telemetry dikirim dahulu.
+- Maksimal satu request Antares per putaran loop; waktu percobaan dicatat saat
+  request dimulai. Telemetry memakai kondisi terbaru tanpa antrean riwayat offline.
+  Request lambat tetap dapat menahan loop, tetapi tidak terus menghalangi giliran
+  operasi lainnya. Timeout tetap bawaan library; data belum tentu berhasil dikirim
+  atau selalu berumur di bawah batas kedaluwarsa dashboard 20 detik.
 
 ## Kontrak dan pembaruan dari v1
 

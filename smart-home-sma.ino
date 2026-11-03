@@ -115,6 +115,7 @@ unsigned long lastWifiAttemptAt = 0;
 unsigned long lastNtpAt = 0;
 unsigned long lastCommandAt = 0;
 unsigned long lastTelemetryAt = 0;
+bool lastCloudWasTelemetry = false;
 unsigned long rfidMessageUntil = 0;
 uint32_t lastCheckedMinute = UINT32_MAX;
 const char *rfidMessage = "READY";
@@ -613,6 +614,7 @@ void checkWiFi() {
       ntpTimePending = false;
       lastCommandAt = now - CLOUD_INTERVAL;
       lastTelemetryAt = now - TELEMETRY_INTERVAL;
+      lastCloudWasTelemetry = false; // Telemetry mendapat giliran pertama.
     }
   }
   if (!connected && WIFI_SSID[0] && now - lastWifiAttemptAt >= WIFI_RETRY_INTERVAL) {
@@ -739,6 +741,7 @@ void setup() {
 
 // Urutan lokal ditempatkan lebih dulu. Tiap putaran hanya membuat satu
 // request Antares agar sensor dan RFID sempat diproses di antara request.
+// Jika keduanya siap, bergantian berdasarkan percobaan terakhir (berhasil/gagal).
 void loop() {
   readWindow();
   checkRfid();
@@ -752,12 +755,16 @@ void loop() {
 
   if (WiFi.status() == WL_CONNECTED && ANTARES_ACCESS_KEY[0]) {
     unsigned long now = millis();
-    if (now - lastCommandAt >= CLOUD_INTERVAL) {
-      lastCommandAt = now;
-      pollCommand();
-    } else if (now - lastTelemetryAt >= TELEMETRY_INTERVAL) {
+    bool commandDue = now - lastCommandAt >= CLOUD_INTERVAL;
+    bool telemetryDue = now - lastTelemetryAt >= TELEMETRY_INTERVAL;
+    if (telemetryDue && (!commandDue || !lastCloudWasTelemetry)) {
       lastTelemetryAt = now;
+      lastCloudWasTelemetry = true;
       publishTelemetry();
+    } else if (commandDue) {
+      lastCommandAt = now;
+      lastCloudWasTelemetry = false;
+      pollCommand();
     }
   }
   delay(1);

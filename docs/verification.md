@@ -10,8 +10,18 @@
   payload campuran, serta nested field asing sebelum diteruskan ke cloud.
 - [x] Tes status: konfirmasi ID, hasil command, data kedaluwarsa, serta lampu
   dinonaktifkan pada telemetry lama/tidak lengkap/invalid.
+- [x] Simulasi penjadwalan: belum ada yang siap, hanya command siap, hanya
+  telemetry siap, keduanya siap bergantian, serta batas interval dan rollover millis.
+- [x] Simulasi command gagal berulang dengan durasi 33 detik: telemetry mendapat
+  giliran berikutnya ketika siap; telemetry lambat juga tidak menghalangi command.
+- [x] Simulasi Wi-Fi tersambung/tersambung kembali: keduanya siap, telemetry lebih
+  dahulu; waktu percobaan dicatat sebelum request, maksimal satu request per loop,
+  dan proses lokal dijalankan di antara request. Wi-Fi putus tidak membuat request.
 
 Pengujian di atas tidak menjalankan ESP32 atau menghubungi Antares nyata.
+Simulasi penjadwalan memakai body `loop()` dan `checkWiFi()` dari sketch dengan
+stub waktu/request, dievaluasi lewat sembilan `static_assert` pada compiler ESP32
+(penghitung unsigned 32-bit); bukan pengukuran latensi jaringan atau perangkat.
 Checklist perangkat berikut masih memerlukan ESP32 dengan port dan wiring yang
 telah diidentifikasi. Pakai project/device uji untuk skenario NVS dan command.
 
@@ -72,7 +82,11 @@ telah diidentifikasi. Pakai project/device uji untuk skenario NVS dan command.
 - [ ] Putuskan Wi-Fi: RTC/jadwal, sensor jendela, RFID, blower, dan OLED tetap
   bekerja. Dashboard menonaktifkan kontrol setelah data berumur >20 detik.
 - [ ] Hubungkan ulang: Wi-Fi reconnect, NTP sinkron, telemetry/command kembali
-  bekerja dengan kontrak baru.
+  bekerja dengan kontrak baru; telemetry menjadi request Antares pertama.
+- [ ] Pada jaringan lambat, pastikan command dan telemetry yang sama-sama siap
+  mendapat giliran bergantian, termasuk setelah request gagal. Telemetry memuat
+  kondisi terbaru tanpa mengirim tumpukan riwayat offline. Request sinkron tetap
+  menunda loop dan dashboard tetap menandai data berumur >20 detik kedaluwarsa.
 
 ## Tampilan
 
