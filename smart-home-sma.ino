@@ -27,8 +27,8 @@
 // Nomor GPIO.
 #define DHT_PIN 4
 #define WINDOW_PIN 33
-#define LAMP_PIN 17
-#define BLOWER_PIN 12
+#define LAMP_PIN 16
+#define BLOWER_PIN 17
 #define OLED_SDA 21
 #define OLED_SCL 22
 #define RFID_SS 5
@@ -45,6 +45,10 @@ constexpr byte RELAY_OFF_LEVEL = LOW;
 constexpr byte POWER_RELAY_ON_LEVEL = HIGH;
 constexpr byte WINDOW_OPEN_LEVEL = HIGH;
 constexpr byte HLW_CURRENT_LEVEL = HIGH;
+
+// Nilai sudut servo untuk kunci pintu. 120 derajat = kunci, 0 derajat = buka.
+constexpr int SERVO_LOCK_ANGLE = 120;
+constexpr int SERVO_UNLOCK_ANGLE = 0;
 
 // Nilai HLW ini contoh awal. Kalibrasi dengan resistor PCB dan beban acuan.
 constexpr double HLW_CURRENT_RESISTOR = 0.001;
@@ -151,17 +155,17 @@ void setBlower(bool on) {
   debugLog("BLOWER", on ? "ON" : "OFF");
 }
 
-// Servo 0 derajat = kunci, 90 derajat = buka. Log debug menampilkan perubahan.
+// Servo 120 derajat = kunci, 0 derajat = buka. Log debug menampilkan perubahan.
 void lockDoor() {
   if (doorLocked) return;
-  lockServo.write(0);
+  lockServo.write(SERVO_LOCK_ANGLE);
   doorLocked = true;
   debugLog("LOCK", "LOCK");
 }
 
 void unlockDoor() {
   if (!doorLocked) return;
-  lockServo.write(90);
+  lockServo.write(SERVO_UNLOCK_ANGLE);
   doorLocked = false;
   debugLog("LOCK", "UNLOCK");
 }
@@ -696,12 +700,15 @@ void setup() {
   antares.setDebug(ANTARES_HTTP_DEBUG);
 
   // Relay utama dimatikan sebelum pin menjadi output. Relay sensor daya ON.
-  digitalWrite(LAMP_PIN, RELAY_OFF_LEVEL); pinMode(LAMP_PIN, OUTPUT);
-  digitalWrite(BLOWER_PIN, RELAY_OFF_LEVEL); pinMode(BLOWER_PIN, OUTPUT);
-  digitalWrite(POWER_RELAY_PIN, POWER_RELAY_ON_LEVEL); pinMode(POWER_RELAY_PIN, OUTPUT);
+  pinMode(LAMP_PIN, OUTPUT);
+  pinMode(BLOWER_PIN, OUTPUT);
+  pinMode(POWER_RELAY_PIN, OUTPUT);
+  digitalWrite(LAMP_PIN, RELAY_OFF_LEVEL);
+  digitalWrite(BLOWER_PIN, RELAY_OFF_LEVEL);
+  digitalWrite(POWER_RELAY_PIN, POWER_RELAY_ON_LEVEL);
   lockServo.setPeriodHertz(50);
   lockServo.attach(SERVO_PIN, 500, 2400);
-  lockServo.write(0); // Kunci mulai dalam state LOCK.
+  lockServo.write(SERVO_LOCK_ANGLE); // Kunci mulai dalam state LOCK.
 
   initContact(windowContact);
   windowOpen = windowContact.stable;
